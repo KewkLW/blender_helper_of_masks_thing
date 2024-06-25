@@ -4,12 +4,12 @@ from bpy_extras.object_utils import world_to_camera_view
 import mathutils
 
 bl_info = {
-    "name": "Random Duplicate Objects with Split Faces, Materials, and Origin Management",
+    "name": "Random Duplicate Objects with Extended Features",
     "blender": (2, 80, 0),
     "category": "Object",
-    "version": (1, 6, 0),
+    "version": (1, 7, 0),
     "location": "View3D > Tool > Random Duplicate Objects",
-    "description": "Create random duplicates, split faces, assign materials, and manage object origins",
+    "description": "Create random duplicates, split faces, assign materials, manage object origins, and set render properties",
     "warning": "",
     "wiki_url": "",
     "tracker_url": "",
@@ -185,11 +185,14 @@ class OBJECT_OT_add_material_with_emission(bpy.types.Operator):
     )
 
     def execute(self, context):
-        selected_obj = context.active_object
-        if selected_obj is not None:
-            add_material_with_emission(selected_obj, self.color, self.color_name)
+        selected_objects = context.selected_objects
+        if selected_objects:
+            for obj in selected_objects:
+                if obj.type == 'MESH':
+                    add_material_with_emission(obj, self.color, self.color_name)
+            self.report({'INFO'}, f"Applied {self.color_name} material to {len(selected_objects)} object(s)")
         else:
-            self.report({'WARNING'}, "No active object selected")
+            self.report({'WARNING'}, "No objects selected")
         return {'FINISHED'}
 
 class OBJECT_OT_add_random_material_with_emission(bpy.types.Operator):
@@ -217,6 +220,33 @@ class OBJECT_OT_add_random_material_with_emission(bpy.types.Operator):
             self.report({'INFO'}, f"Applied random colors to {len(selected_objects)} object(s)")
         else:
             self.report({'WARNING'}, "No objects selected")
+        return {'FINISHED'}
+
+class RENDER_OT_set_resolution(bpy.types.Operator):
+    bl_idname = "render.set_resolution"
+    bl_label = "Set Render Resolution"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    resolution: bpy.props.IntProperty(
+        name="Resolution",
+        default=512,
+        min=1
+    )
+
+    def execute(self, context):
+        context.scene.render.resolution_x = self.resolution
+        context.scene.render.resolution_y = self.resolution
+        self.report({'INFO'}, f"Set render resolution to {self.resolution}x{self.resolution}")
+        return {'FINISHED'}
+
+class RENDER_OT_fix_color(bpy.types.Operator):
+    bl_idname = "render.fix_color"
+    bl_label = "Fix Color"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        context.scene.view_settings.view_transform = 'Standard'
+        self.report({'INFO'}, "Set color view transform to 'Standard'")
         return {'FINISHED'}
 
 class OBJECT_PT_random_duplicate_panel(bpy.types.Panel):
@@ -249,6 +279,14 @@ class OBJECT_PT_random_duplicate_panel(bpy.types.Panel):
         layout.operator("object.split_faces")
         layout.operator("object.move_to_origin")
         layout.operator("object.set_new_origin")
+        
+        layout.separator()
+        
+        layout.label(text="Render Settings:")
+        row = layout.row(align=True)
+        row.operator("render.set_resolution", text="512x512").resolution = 512
+        row.operator("render.set_resolution", text="1024x1024").resolution = 1024
+        layout.operator("render.fix_color", text="Fix Color")
         
         layout.separator()
         
@@ -326,6 +364,8 @@ classes = (
     OBJECT_OT_add_random_material_with_emission,
     OBJECT_OT_move_to_origin,
     OBJECT_OT_set_origin,
+    RENDER_OT_set_resolution,
+    RENDER_OT_fix_color,
     OBJECT_PT_random_duplicate_panel,
     RandomDuplicateProperties
 )
