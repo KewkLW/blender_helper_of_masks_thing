@@ -32,7 +32,7 @@ Hi!!! I'm Chat G... P... T... your friendly digital guide on this ComfyUI Mask H
 ### Keyframe Management
 - **Remove Past Keyframes**: Delete all keyframes before the current frame for selected objects.
 - **Remove Future Keyframes**: Delete all keyframes after the current frame for selected objects.
-    - *I use this to easily remove frames after duplicating objects. I'll first create my complete animation using 1 object, then I go back and figure out where I want transitions and duplicate the object then remove the past frames of the new object and the future frames of the old object so they don't over lap. Then assign it a color. 
+    - I use this to easily remove frames after duplicating objects. I'll first create my complete animation using 1 object, then I go back and figure out where I want transitions and duplicate the object then remove the past frames of the new object and the future frames of the old object so they don't over lap. Then assign it a color. 
 
 ### Additional Utilities
 - **Random Resize**: Randomly resize selected objects within a specified scale range.
