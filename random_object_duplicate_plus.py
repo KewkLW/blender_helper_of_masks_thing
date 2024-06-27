@@ -5,15 +5,14 @@ import mathutils
 
 bl_info = {
     "name": "Random Duplicate Objects with Extended Features",
-    "blender": (2, 80, 0),
+    "Author": "Kewk",
+    "blender": (3, 3, 0),
     "category": "Object",
-    "version": (1, 7, 0),
-    "location": "View3D > Tool > Random Duplicate Objects",
+    "version": (1, 8, 0),
+    "location": "View3D > Tool > Kewky ComfyUI Tools",
     "description": "Create random duplicates, split faces, assign materials, manage object origins, and set render properties",
-    "warning": "",
-    "wiki_url": "",
-    "tracker_url": "",
-    "support": "COMMUNITY",
+    "warning": "If you star at the sun, you will burn your retinas",
+    "tracker_url": "https://github.com/KewkLW/blender_helper_of_masks_thing",
 }
 
 def is_object_visible(obj, camera, scene):
@@ -52,63 +51,62 @@ def add_material_with_emission(obj, color, color_name):
             obj.data.materials.append(material)
         print(f"Added {color_name} material with emission to {obj.name}")
 
-class OBJECT_OT_random_duplicate(bpy.types.Operator):
-    bl_idname = "object.random_duplicate"
-    bl_label = "Random Duplicate"
-    bl_description = "Create random duplicates of the selected object"
+class ANIM_OT_remove_past_keyframes(bpy.types.Operator):
+    bl_idname = "anim.remove_past_keyframes"
+    bl_label = "Remove Past Keyframes"
+    bl_description = "Remove all keyframes before the current frame for the selected object"
     bl_options = {'REGISTER', 'UNDO'}
-    
+
     def execute(self, context):
         obj = context.active_object
-        props = context.scene.random_duplicate_props
-        
-        if obj is None:
-            self.report({'ERROR'}, "No active object selected")
+        if obj is None or obj.animation_data is None or obj.animation_data.action is None:
+            self.report({'ERROR'}, "No active object with animation data selected")
             return {'CANCELLED'}
-        
-        group_name = props.group_name
-        collection = bpy.data.collections.get(group_name)
-        
-        if collection is None:
-            collection = bpy.data.collections.new(group_name)
-            context.scene.collection.children.link(collection)
-        
-        for _ in range(props.num_duplicates):
-            duplicate = obj.copy()
-            duplicate.data = obj.data.copy()
-            duplicate.location = (
-                obj.location.x + random.uniform(-props.x_range, props.x_range),
-                obj.location.y + random.uniform(-props.y_range, props.y_range),
-                obj.location.z + random.uniform(-props.z_range, props.z_range),
-            )
-            scale_factor = random.uniform(props.scale_min, props.scale_max)
-            duplicate.scale = (scale_factor, scale_factor, scale_factor)
-            collection.objects.link(duplicate)
-        
+
+        current_frame = context.scene.frame_current
+        action = obj.animation_data.action
+        total_removed = 0
+
+        for fcurve in action.fcurves:
+            keyframes_to_keep = [kf for kf in fcurve.keyframe_points if kf.co.x >= current_frame]
+            total_removed += len(fcurve.keyframe_points) - len(keyframes_to_keep)
+            fcurve.keyframe_points.clear()
+            for kf in keyframes_to_keep:
+                fcurve.keyframe_points.insert(frame=kf.co.x, value=kf.co.y)
+            fcurve.update()
+
+        action.update_tag()
+        context.scene.frame_set(current_frame)  # Refresh the view
+        self.report({'INFO'}, f"Removed {total_removed} past keyframes for {obj.name}")
         return {'FINISHED'}
 
-class OBJECT_OT_randomize_location(bpy.types.Operator):
-    bl_idname = "object.randomize_location"
-    bl_label = "Randomize Location"
-    bl_description = "Randomize the location of selected objects"
+class ANIM_OT_remove_future_keyframes(bpy.types.Operator):
+    bl_idname = "anim.remove_future_keyframes"
+    bl_label = "Remove Future Keyframes"
+    bl_description = "Remove all keyframes after the current frame for the selected object"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        props = context.scene.random_duplicate_props
-        selected_objects = context.selected_objects
-        
-        if not selected_objects:
-            self.report({'ERROR'}, "No objects selected")
+        obj = context.active_object
+        if obj is None or obj.animation_data is None or obj.animation_data.action is None:
+            self.report({'ERROR'}, "No active object with animation data selected")
             return {'CANCELLED'}
-        
-        for obj in selected_objects:
-            obj.location = (
-                obj.location.x + random.uniform(-props.x_range, props.x_range),
-                obj.location.y + random.uniform(-props.y_range, props.y_range),
-                obj.location.z + random.uniform(-props.z_range, props.z_range)
-            )
-        
-        self.report({'INFO'}, f"Randomized locations of {len(selected_objects)} object(s)")
+
+        current_frame = context.scene.frame_current
+        action = obj.animation_data.action
+        total_removed = 0
+
+        for fcurve in action.fcurves:
+            keyframes_to_keep = [kf for kf in fcurve.keyframe_points if kf.co.x <= current_frame]
+            total_removed += len(fcurve.keyframe_points) - len(keyframes_to_keep)
+            fcurve.keyframe_points.clear()
+            for kf in keyframes_to_keep:
+                fcurve.keyframe_points.insert(frame=kf.co.x, value=kf.co.y)
+            fcurve.update()
+
+        action.update_tag()
+        context.scene.frame_set(current_frame)  # Refresh the view
+        self.report({'INFO'}, f"Removed {total_removed} future keyframes for {obj.name}")
         return {'FINISHED'}
 
 class OBJECT_OT_split_faces(bpy.types.Operator):
@@ -249,71 +247,116 @@ class RENDER_OT_fix_color(bpy.types.Operator):
         self.report({'INFO'}, "Set color view transform to 'Standard'")
         return {'FINISHED'}
 
+class OBJECT_OT_random_resize(bpy.types.Operator):
+    bl_idname = "object.random_resize"
+    bl_label = "Random Resize"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        props = context.scene.random_duplicate_props
+        selected_objects = context.selected_objects
+        
+        for obj in selected_objects:
+            random_scale = random.uniform(props.scale_min, props.scale_max)
+            obj.scale = (random_scale, random_scale, random_scale)
+        
+        self.report({'INFO'}, f"Randomly resized {len(selected_objects)} object(s)")
+        return {'FINISHED'}
+
 class OBJECT_PT_random_duplicate_panel(bpy.types.Panel):
     bl_idname = "OBJECT_PT_random_duplicate_panel"
     bl_label = "Random Duplicate Objects"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'Random Duplicates'
+    bl_category = 'Kewky ComfyUI Tools'
     
     def draw(self, context):
         layout = self.layout
         props = context.scene.random_duplicate_props
         
-        layout.prop(props, "num_duplicates")
-        layout.prop(props, "x_range")
-        layout.prop(props, "y_range")
-        layout.prop(props, "z_range")
-        layout.prop(props, "scale_min")
-        layout.prop(props, "scale_max")
-        layout.prop(props, "group_name")
-        layout.operator("object.random_duplicate")
+        # Random Duplicate Objects
+        box = layout.box()
+        row = box.row()
+        row.prop(context.scene, "show_random_duplicate", icon="TRIA_DOWN" if context.scene.show_random_duplicate else "TRIA_RIGHT", icon_only=True, emboss=False)
+        row.label(text="Random Duplicate Objects")
+        if context.scene.show_random_duplicate:
+            box.prop(props, "num_duplicates")
+            box.prop(props, "x_range")
+            box.prop(props, "y_range")
+            box.prop(props, "z_range")
+            box.prop(props, "group_name")
+            box.operator("object.random_duplicate")
         
-        layout.separator()
+        # Utils
+        box = layout.box()
+        row = box.row()
+        row.prop(context.scene, "show_utils", icon="TRIA_DOWN" if context.scene.show_utils else "TRIA_RIGHT", icon_only=True, emboss=False)
+        row.label(text="Utils")
+        if context.scene.show_utils:
+            box.prop(props, "loc_range")
+            box.operator("object.randomize_location")
+            box.operator("object.split_faces")
+            box.operator("object.move_to_origin")
         
-        layout.prop(props, "loc_range")
-        layout.operator("object.randomize_location")
+        # Random Object Size
+        box = layout.box()
+        row = box.row()
+        row.prop(context.scene, "show_random_size", icon="TRIA_DOWN" if context.scene.show_random_size else "TRIA_RIGHT", icon_only=True, emboss=False)
+        row.label(text="Random Object Size")
+        if context.scene.show_random_size:
+            box.prop(props, "scale_min")
+            box.prop(props, "scale_max")
+            box.operator("object.random_resize")
         
-        layout.separator()
+        # Random Render Settings
+        box = layout.box()
+        row = box.row()
+        row.prop(context.scene, "show_render_settings", icon="TRIA_DOWN" if context.scene.show_render_settings else "TRIA_RIGHT", icon_only=True, emboss=False)
+        row.label(text="Random Render Settings")
+        if context.scene.show_render_settings:
+            row = box.row(align=True)
+            row.operator("render.set_resolution", text="512x512").resolution = 512
+            row.operator("render.set_resolution", text="1024x1024").resolution = 1024
+            box.operator("render.fix_color", text="Fix Color")
         
-        layout.operator("object.split_faces")
-        layout.operator("object.move_to_origin")
-        layout.operator("object.set_new_origin")
+        # Set Material
+        box = layout.box()
+        row = box.row()
+        row.prop(context.scene, "show_set_material", icon="TRIA_DOWN" if context.scene.show_set_material else "TRIA_RIGHT", icon_only=True, emboss=False)
+        row.label(text="Set Material")
+        if context.scene.show_set_material:
+            colors = [
+                ("Red", (1.0, 0.0, 0.0, 1.0)),
+                ("Green", (0.0, 1.0, 0.0, 1.0)),
+                ("Blue", (0.0, 0.0, 1.0, 1.0)),
+                ("Cyan", (0.0, 1.0, 1.0, 1.0)),
+                ("Magenta", (1.0, 0.0, 1.0, 1.0)),
+                ("Yellow", (1.0, 1.0, 0.0, 1.0)),
+                ("Black", (0.0, 0.0, 0.0, 1.0)),
+                ("White", (1.0, 1.0, 1.0, 1.0))
+            ]
+            
+            col = box.column(align=True)
+            for i in range(0, len(colors), 3):
+                row = col.row(align=True)
+                for j in range(3):
+                    if i + j < len(colors):
+                        color_name, color_value = colors[i + j]
+                        op = row.operator("object.add_material_with_emission", text=color_name, icon='MATERIAL')
+                        op.color = color_value
+                        op.color_name = color_name
+            
+            box.operator("object.add_random_material_with_emission", text="Random Color", icon='COLOR')
         
-        layout.separator()
-        
-        layout.label(text="Render Settings:")
-        row = layout.row(align=True)
-        row.operator("render.set_resolution", text="512x512").resolution = 512
-        row.operator("render.set_resolution", text="1024x1024").resolution = 1024
-        layout.operator("render.fix_color", text="Fix Color")
-        
-        layout.separator()
-        
-        layout.label(text="Add Material with Emission:")
-        
-        colors = [
-            ("Red", (1.0, 0.0, 0.0, 1.0)),
-            ("Green", (0.0, 1.0, 0.0, 1.0)),
-            ("Blue", (0.0, 0.0, 1.0, 1.0)),
-            ("Cyan", (0.0, 1.0, 1.0, 1.0)),
-            ("Magenta", (1.0, 0.0, 1.0, 1.0)),
-            ("Yellow", (1.0, 1.0, 0.0, 1.0)),
-            ("Black", (0.0, 0.0, 0.0, 1.0)),
-            ("White", (1.0, 1.0, 1.0, 1.0))
-        ]
-        
-        col = layout.column(align=True)
-        for i in range(0, len(colors), 3):
-            row = col.row(align=True)
-            for j in range(3):
-                if i + j < len(colors):
-                    color_name, color_value = colors[i + j]
-                    op = row.operator("object.add_material_with_emission", text=color_name, icon='MATERIAL')
-                    op.color = color_value
-                    op.color_name = color_name
-        
-        layout.operator("object.add_random_material_with_emission", text="Random Color", icon='COLOR')
+        # Keyframe Management
+        box = layout.box()
+        row = box.row()
+        row.prop(context.scene, "show_keyframe_management", icon="TRIA_DOWN" if context.scene.show_keyframe_management else "TRIA_RIGHT", icon_only=True, emboss=False)
+        row.label(text="Keyframe Management")
+        if context.scene.show_keyframe_management:
+            row = box.row(align=True)
+            row.operator("anim.remove_past_keyframes", text="Remove Past")
+            row.operator("anim.remove_future_keyframes", text="Remove Future")
 
 class RandomDuplicateProperties(bpy.types.PropertyGroup):
     num_duplicates: bpy.props.IntProperty(
@@ -355,17 +398,28 @@ class RandomDuplicateProperties(bpy.types.PropertyGroup):
         default=1.0,
         min=0.0
     )
+    
+    # Add new properties for the collapsible sections
+    show_random_duplicate: bpy.props.BoolProperty(default=True)
+    show_random_size: bpy.props.BoolProperty(default=True)
+    show_render_settings: bpy.props.BoolProperty(default=True)
+    show_set_material: bpy.props.BoolProperty(default=True)
+    show_keyframe_management: bpy.props.BoolProperty(default=True)
+    show_utils: bpy.props.BoolProperty(default=True)  # Add property for Utils section
 
 classes = (
     OBJECT_OT_random_duplicate,
     OBJECT_OT_randomize_location,
-    OBJECT_OT_split_faces,
+    OBJECT_OT_split_faces,  # Add this line
     OBJECT_OT_add_material_with_emission,
     OBJECT_OT_add_random_material_with_emission,
-    OBJECT_OT_move_to_origin,
+    OBJECT_OT_move_to_origin,  # Add this line
     OBJECT_OT_set_origin,
     RENDER_OT_set_resolution,
     RENDER_OT_fix_color,
+    ANIM_OT_remove_past_keyframes,
+    ANIM_OT_remove_future_keyframes,
+    OBJECT_OT_random_resize,
     OBJECT_PT_random_duplicate_panel,
     RandomDuplicateProperties
 )
@@ -374,11 +428,25 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.types.Scene.random_duplicate_props = bpy.props.PointerProperty(type=RandomDuplicateProperties)
+    # Register the new properties for collapsible sections
+    bpy.types.Scene.show_random_duplicate = bpy.props.BoolProperty(default=True)
+    bpy.types.Scene.show_random_size = bpy.props.BoolProperty(default=True)
+    bpy.types.Scene.show_render_settings = bpy.props.BoolProperty(default=True)
+    bpy.types.Scene.show_set_material = bpy.props.BoolProperty(default=True)
+    bpy.types.Scene.show_keyframe_management = bpy.props.BoolProperty(default=True)
+    bpy.types.Scene.show_utils = bpy.props.BoolProperty(default=True)  # Register property for Utils section
 
 def unregister():
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
     del bpy.types.Scene.random_duplicate_props
+    # Unregister the new properties for collapsible sections
+    del bpy.types.Scene.show_random_duplicate
+    del bpy.types.Scene.show_random_size
+    del bpy.types.Scene.show_render_settings
+    del bpy.types.Scene.show_set_material
+    del bpy.types.Scene.show_keyframe_management
+    del bpy.types.Scene.show_utils  # Unregister property for Utils section
 
 if __name__ == "__main__":
     register()
