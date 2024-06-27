@@ -29,26 +29,31 @@ def add_material_with_emission(obj, color, color_name):
         material = bpy.data.materials.new(name=f"{color_name}Material")
         material.use_nodes = True
         nodes = material.node_tree.nodes
+        links = material.node_tree.links
+        
+        # Clear default nodes
         for node in nodes:
             nodes.remove(node)
-        bsdf = nodes.new(type='ShaderNodeBsdfPrincipled')
-        bsdf.location = (0, 0)
-        bsdf.inputs['Base Color'].default_value = color
+        
+        # Create emission shader
         emission = nodes.new(type='ShaderNodeEmission')
-        emission.location = (0, -200)
+        emission.location = (0, 0)
         emission.inputs['Color'].default_value = color
         emission.inputs['Strength'].default_value = 1
-        add_shader = nodes.new(type='ShaderNodeAddShader')
-        add_shader.location = (200, 0)
+        
+        # Create material output
         material_output = nodes.new(type='ShaderNodeOutputMaterial')
-        material_output.location = (400, 0)
-        material.node_tree.links.new(bsdf.outputs['BSDF'], add_shader.inputs[0])
-        material.node_tree.links.new(emission.outputs['Emission'], add_shader.inputs[1])
-        material.node_tree.links.new(add_shader.outputs['Shader'], material_output.inputs['Surface'])
+        material_output.location = (200, 0)
+        
+        # Link emission to material output
+        links.new(emission.outputs['Emission'], material_output.inputs['Surface'])
+        
+        # Assign the material to the object
         if len(obj.data.materials) > 0:
             obj.data.materials[0] = material
         else:
             obj.data.materials.append(material)
+        
         print(f"Added {color_name} material with emission to {obj.name}")
 
 class OBJECT_OT_random_duplicate(bpy.types.Operator):
