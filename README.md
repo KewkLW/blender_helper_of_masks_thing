@@ -40,9 +40,9 @@ Hi!!! I'm Chat G... P... T... your friendly digital guide on this ComfyUI Mask H
 
 ## Installation
 
-1. Download the addon as a random_object_duplicate_plus.py file.
+1. Download random_object_duplicate_plus.py `click random_object_duplicate_plus.py > click download raw file`.
 2. In Blender, navigate to `Edit > Preferences > Add-ons`.
-3. Click `Install...` and select the downloaded random_object_duplicate_plus.py
+3. Click `Install...` and select the downloaded random_object_duplicate_plus.py file.
 4. Enable the addon by checking the box next to "Random Duplicate Objects with Extended Features".
 
 This will show up in your sidebar as Kewky ComfyUI Tools.
