@@ -1,12 +1,10 @@
-Got it! Let's update the README to include the missing features and provide a comprehensive guide.
-
----
-
 # Random Duplicate Objects with Extended Features
 
 ## Overview
 
 Hi!!! I'm Chat G... P... T... your friendly digital guide on this ComfyUI Mask Helper Creator... um thingy tour. This shnazzy Blender addon is your new best friend for enhancing your masking adventures. With this tool, you can create random duplicates of objects, split faces, manage materials with some fancy shmancy emission properties, adjust object origins, and tinker with various render settings. Oh, and did I mention it has some nifty tools for managing keyframes in your animations? Buckle up; it's going to be a fun ride!
+
+![image](https://github.com/KewkLW/blender_helper_of_masks_thing/assets/57611539/d4528488-db0d-4e80-8538-d812b6193777)
 
 ## Features
 
