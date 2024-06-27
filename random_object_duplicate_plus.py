@@ -371,7 +371,7 @@ class RandomDuplicateProperties(bpy.types.PropertyGroup):
     )
     y_range: bpy.props.FloatProperty(
         name="Y Range",
-        default=5.0,
+        default=0.0,
         min=0.0
     )
     z_range: bpy.props.FloatProperty(
