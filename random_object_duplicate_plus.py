@@ -51,6 +51,30 @@ def add_material_with_emission(obj, color, color_name):
             obj.data.materials.append(material)
         print(f"Added {color_name} material with emission to {obj.name}")
 
+class OBJECT_OT_random_duplicate(bpy.types.Operator):
+    bl_idname = "object.random_duplicate"
+    bl_label = "Random Duplicate"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        props = context.scene.random_duplicate_props
+        selected_objects = context.selected_objects
+        num_duplicates = props.num_duplicates
+
+        for obj in selected_objects:
+            for _ in range(num_duplicates):
+                obj_copy = obj.copy()
+                obj_copy.data = obj_copy.data.copy()
+                context.collection.objects.link(obj_copy)
+
+                random_x = random.uniform(-props.x_range, props.x_range)
+                random_y = random.uniform(-props.y_range, props.y_range)
+                random_z = random.uniform(-props.z_range, props.z_range)
+                obj_copy.location += mathutils.Vector((random_x, random_y, random_z))
+
+        self.report({'INFO'}, f"Duplicated {len(selected_objects)} object(s) {num_duplicates} times")
+        return {'FINISHED'}
+
 class ANIM_OT_remove_past_keyframes(bpy.types.Operator):
     bl_idname = "anim.remove_past_keyframes"
     bl_label = "Remove Past Keyframes"
@@ -76,7 +100,7 @@ class ANIM_OT_remove_past_keyframes(bpy.types.Operator):
             fcurve.update()
 
         action.update_tag()
-        context.scene.frame_set(current_frame)  # Refresh the view
+        context.scene.frame_set(current_frame)
         self.report({'INFO'}, f"Removed {total_removed} past keyframes for {obj.name}")
         return {'FINISHED'}
 
@@ -105,7 +129,7 @@ class ANIM_OT_remove_future_keyframes(bpy.types.Operator):
             fcurve.update()
 
         action.update_tag()
-        context.scene.frame_set(current_frame)  # Refresh the view
+        context.scene.frame_set(current_frame)
         self.report({'INFO'}, f"Removed {total_removed} future keyframes for {obj.name}")
         return {'FINISHED'}
 
@@ -263,6 +287,25 @@ class OBJECT_OT_random_resize(bpy.types.Operator):
         self.report({'INFO'}, f"Randomly resized {len(selected_objects)} object(s)")
         return {'FINISHED'}
 
+class OBJECT_OT_randomize_location(bpy.types.Operator):
+    bl_idname = "object.randomize_location"
+    bl_label = "Randomize Location"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        props = context.scene.random_duplicate_props
+        selected_objects = context.selected_objects
+        
+        for obj in selected_objects:
+            random_x = random.uniform(-props.x_range, props.x_range)
+            random_y = random.uniform(-props.y_range, props.y_range)
+            random_z = random.uniform(-props.z_range, props.z_range)
+            
+            obj.location = (random_x, random_y, random_z)
+        
+        self.report({'INFO'}, f"Randomized location for {len(selected_objects)} object(s)")
+        return {'FINISHED'}
+
 class OBJECT_PT_random_duplicate_panel(bpy.types.Panel):
     bl_idname = "OBJECT_PT_random_duplicate_panel"
     bl_label = "Random Duplicate Objects"
@@ -293,9 +336,9 @@ class OBJECT_PT_random_duplicate_panel(bpy.types.Panel):
         row.prop(context.scene, "show_utils", icon="TRIA_DOWN" if context.scene.show_utils else "TRIA_RIGHT", icon_only=True, emboss=False)
         row.label(text="Utils")
         if context.scene.show_utils:
-            box.prop(props, "loc_range")
             box.operator("object.randomize_location")
             box.operator("object.split_faces")
+            box.operator("object.set_new_origin")
             box.operator("object.move_to_origin")
         
         # Random Object Size
@@ -371,7 +414,7 @@ class RandomDuplicateProperties(bpy.types.PropertyGroup):
     )
     y_range: bpy.props.FloatProperty(
         name="Y Range",
-        default=0.0,
+        default=5.0,
         min=0.0
     )
     z_range: bpy.props.FloatProperty(
@@ -393,11 +436,6 @@ class RandomDuplicateProperties(bpy.types.PropertyGroup):
         name="Group Name",
         default="RandomDuplicates"
     )
-    loc_range: bpy.props.FloatProperty(
-        name="Location Range",
-        default=1.0,
-        min=0.0
-    )
     
     # Add new properties for the collapsible sections
     show_random_duplicate: bpy.props.BoolProperty(default=True)
@@ -405,15 +443,15 @@ class RandomDuplicateProperties(bpy.types.PropertyGroup):
     show_render_settings: bpy.props.BoolProperty(default=True)
     show_set_material: bpy.props.BoolProperty(default=True)
     show_keyframe_management: bpy.props.BoolProperty(default=True)
-    show_utils: bpy.props.BoolProperty(default=True)  # Add property for Utils section
+    show_utils: bpy.props.BoolProperty(default=True)  
 
 classes = (
     OBJECT_OT_random_duplicate,
     OBJECT_OT_randomize_location,
-    OBJECT_OT_split_faces,  # Add this line
+    OBJECT_OT_split_faces, 
     OBJECT_OT_add_material_with_emission,
     OBJECT_OT_add_random_material_with_emission,
-    OBJECT_OT_move_to_origin,  # Add this line
+    OBJECT_OT_move_to_origin,
     OBJECT_OT_set_origin,
     RENDER_OT_set_resolution,
     RENDER_OT_fix_color,
@@ -428,25 +466,23 @@ def register():
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.types.Scene.random_duplicate_props = bpy.props.PointerProperty(type=RandomDuplicateProperties)
-    # Register the new properties for collapsible sections
     bpy.types.Scene.show_random_duplicate = bpy.props.BoolProperty(default=True)
     bpy.types.Scene.show_random_size = bpy.props.BoolProperty(default=True)
     bpy.types.Scene.show_render_settings = bpy.props.BoolProperty(default=True)
     bpy.types.Scene.show_set_material = bpy.props.BoolProperty(default=True)
     bpy.types.Scene.show_keyframe_management = bpy.props.BoolProperty(default=True)
-    bpy.types.Scene.show_utils = bpy.props.BoolProperty(default=True)  # Register property for Utils section
+    bpy.types.Scene.show_utils = bpy.props.BoolProperty(default=True) 
 
 def unregister():
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
     del bpy.types.Scene.random_duplicate_props
-    # Unregister the new properties for collapsible sections
     del bpy.types.Scene.show_random_duplicate
     del bpy.types.Scene.show_random_size
     del bpy.types.Scene.show_render_settings
     del bpy.types.Scene.show_set_material
     del bpy.types.Scene.show_keyframe_management
-    del bpy.types.Scene.show_utils  # Unregister property for Utils section
+    del bpy.types.Scene.show_utils  
 
 if __name__ == "__main__":
     register()
