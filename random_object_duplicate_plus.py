@@ -11,7 +11,7 @@ bl_info = {
     "version": (1, 8, 0),
     "location": "View3D > Tool > Kewky ComfyUI Tools",
     "description": "Create random duplicates, split faces, assign materials, manage object origins, and set render properties",
-    "warning": "If you star at the sun, you will burn your retinas",
+    "warning": "If you stare at the sun, you will burn your retinas",
     "tracker_url": "https://github.com/KewkLW/blender_helper_of_masks_thing",
 }
 
@@ -72,9 +72,9 @@ class OBJECT_OT_random_duplicate(bpy.types.Operator):
                 obj_copy.data = obj_copy.data.copy()
                 context.collection.objects.link(obj_copy)
 
-                random_x = random.uniform(-props.x_range, props.x_range)
-                random_y = random.uniform(-props.y_range, props.y_range)
-                random_z = random.uniform(-props.z_range, props.z_range)
+                random_x = random.uniform(-props.x_range, props.x_range) if props.use_x_range else 0
+                random_y = random.uniform(-props.y_range, props.y_range) if props.use_y_range else 0
+                random_z = random.uniform(-props.z_range, props.z_range) if props.use_z_range else 0
                 obj_copy.location += mathutils.Vector((random_x, random_y, random_z))
 
         self.report({'INFO'}, f"Duplicated {len(selected_objects)} object(s) {num_duplicates} times")
@@ -193,6 +193,7 @@ class OBJECT_OT_set_origin(bpy.types.Operator):
         self.report({'INFO'}, f"Set new origin for {len(context.selected_objects)} object(s)")
         return {'FINISHED'}
 
+
 class OBJECT_OT_add_material_with_emission(bpy.types.Operator):
     bl_idname = "object.add_material_with_emission"
     bl_label = "Add Material with Emission"
@@ -213,14 +214,49 @@ class OBJECT_OT_add_material_with_emission(bpy.types.Operator):
 
     def execute(self, context):
         selected_objects = context.selected_objects
-        if selected_objects:
+        if not selected_objects:
+            # If no objects are selected, find and select objects with the specified color
+            for obj in context.view_layer.objects:
+                if obj.type == 'MESH' and obj.data.materials and self.is_object_visible(obj, context):
+                    for material in obj.data.materials:
+                        if self.check_material_color(material):
+                            obj.select_set(True)
+                            selected_objects.append(obj)
+                            break  # Stop checking other materials for this object
+            
+            if selected_objects:
+                context.view_layer.objects.active = selected_objects[0]
+                self.report({'INFO'}, f"Selected {len(selected_objects)} object(s) with {self.color_name} material")
+            else:
+                self.report({'WARNING'}, f"No visible objects found with {self.color_name} material")
+        else:
+            # Apply the material to selected objects as before
             for obj in selected_objects:
                 if obj.type == 'MESH':
                     add_material_with_emission(obj, self.color, self.color_name)
             self.report({'INFO'}, f"Applied {self.color_name} material to {len(selected_objects)} object(s)")
-        else:
-            self.report({'WARNING'}, "No objects selected")
+        
         return {'FINISHED'}
+
+    def check_material_color(self, material):
+        if material.use_nodes:
+            for node in material.node_tree.nodes:
+                if node.type == 'EMISSION':
+                    node_color = node.inputs['Color'].default_value
+                    if self.compare_colors(node_color, self.color):
+                        return True
+                elif node.type == 'BSDF_PRINCIPLED':
+                    node_color = node.inputs['Base Color'].default_value
+                    if self.compare_colors(node_color, self.color):
+                        return True
+        return False
+
+    def compare_colors(self, color1, color2, tolerance=0.01):
+        return all(abs(c1 - c2) < tolerance for c1, c2 in zip(color1[:3], color2[:3]))
+
+    def is_object_visible(self, obj, context):
+        # Check if the object is visible in the viewport and not hidden
+        return obj.visible_get() and not obj.hide_viewport and not obj.hide_render
 
 class OBJECT_OT_add_random_material_with_emission(bpy.types.Operator):
     bl_idname = "object.add_random_material_with_emission"
@@ -302,14 +338,58 @@ class OBJECT_OT_randomize_location(bpy.types.Operator):
         selected_objects = context.selected_objects
         
         for obj in selected_objects:
-            random_x = random.uniform(-props.x_range, props.x_range)
-            random_y = random.uniform(-props.y_range, props.y_range)
-            random_z = random.uniform(-props.z_range, props.z_range)
+            random_x = random.uniform(-props.x_range, props.x_range) if props.use_x_range else obj.location.x
+            random_y = random.uniform(-props.y_range, props.y_range) if props.use_y_range else obj.location.y
+            random_z = random.uniform(-props.z_range, props.z_range) if props.use_z_range else obj.location.z
             
             obj.location = (random_x, random_y, random_z)
         
         self.report({'INFO'}, f"Randomized location for {len(selected_objects)} object(s)")
         return {'FINISHED'}
+
+class OBJECT_OT_select_all_in_groups(bpy.types.Operator):
+    bl_idname = "object.select_all_in_groups"
+    bl_label = "Select All In Groups"
+    bl_description = "Toggle selecting all objects in a group by clicking on it"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        context.scene.select_all_in_groups = not context.scene.select_all_in_groups
+        return {'FINISHED'}
+
+def select_group_objects(self, context):
+    if context.scene.select_all_in_groups:
+        if self.bl_space_type == 'OUTLINER':
+            active_object = context.active_object
+            if active_object and active_object.users_collection:
+                bpy.ops.object.select_all(action='DESELECT')
+                for obj in active_object.users_collection[0].objects:
+                    obj.select_set(True)
+                context.view_layer.objects.active = active_object
+    return None
+
+class OUTLINER_OT_select_group_objects(bpy.types.Operator):
+    bl_idname = "outliner.select_group_objects"
+    bl_label = "Select All Objects in Group"
+    bl_description = "Select all objects in the clicked group"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    group_name: bpy.props.StringProperty()
+
+    def execute(self, context):
+        if context.scene.select_all_in_groups:
+            collection = bpy.data.collections.get(self.group_name)
+            if collection:
+                bpy.ops.object.select_all(action='DESELECT')
+                for obj in collection.objects:
+                    obj.select_set(True)
+                if collection.objects:
+                    context.view_layer.objects.active = collection.objects[0]
+        return {'FINISHED'}
+
+def draw_outliner_group_menu(self, context):
+    layout = self.layout
+    layout.operator(OUTLINER_OT_select_group_objects.bl_idname, text="Select All Objects").group_name = context.collection.name
 
 class OBJECT_PT_random_duplicate_panel(bpy.types.Panel):
     bl_idname = "OBJECT_PT_random_duplicate_panel"
@@ -329,9 +409,25 @@ class OBJECT_PT_random_duplicate_panel(bpy.types.Panel):
         row.label(text="Random Duplicate Objects")
         if context.scene.show_random_duplicate:
             box.prop(props, "num_duplicates")
-            box.prop(props, "x_range")
-            box.prop(props, "y_range")
-            box.prop(props, "z_range")
+            
+            row = box.row(align=True)
+            row.prop(props, "use_x_range", text="")
+            sub = row.row()
+            sub.enabled = props.use_x_range
+            sub.prop(props, "x_range")
+            
+            row = box.row(align=True)
+            row.prop(props, "use_y_range", text="")
+            sub = row.row()
+            sub.enabled = props.use_y_range
+            sub.prop(props, "y_range")
+            
+            row = box.row(align=True)
+            row.prop(props, "use_z_range", text="")
+            sub = row.row()
+            sub.enabled = props.use_z_range
+            sub.prop(props, "z_range")
+            
             box.prop(props, "group_name")
             box.operator("object.random_duplicate")
         
@@ -345,6 +441,7 @@ class OBJECT_PT_random_duplicate_panel(bpy.types.Panel):
             box.operator("object.split_faces")
             box.operator("object.set_new_origin")
             box.operator("object.move_to_origin")
+            box.prop(context.scene, "select_all_in_groups", text="Select All In Groups")
         
         # Random Object Size
         box = layout.box()
@@ -441,6 +538,18 @@ class RandomDuplicateProperties(bpy.types.PropertyGroup):
         name="Group Name",
         default="RandomDuplicates"
     )
+    use_x_range: bpy.props.BoolProperty(
+        name="Use X Range",
+        default=True
+    )
+    use_y_range: bpy.props.BoolProperty(
+        name="Use Y Range",
+        default=True
+    )
+    use_z_range: bpy.props.BoolProperty(
+        name="Use Z Range",
+        default=True
+    )
     
     # Add new properties for the collapsible sections
     show_random_duplicate: bpy.props.BoolProperty(default=True)
@@ -463,6 +572,8 @@ classes = (
     ANIM_OT_remove_past_keyframes,
     ANIM_OT_remove_future_keyframes,
     OBJECT_OT_random_resize,
+    OBJECT_OT_select_all_in_groups,
+    OUTLINER_OT_select_group_objects,
     OBJECT_PT_random_duplicate_panel,
     RandomDuplicateProperties
 )
@@ -476,7 +587,14 @@ def register():
     bpy.types.Scene.show_render_settings = bpy.props.BoolProperty(default=True)
     bpy.types.Scene.show_set_material = bpy.props.BoolProperty(default=True)
     bpy.types.Scene.show_keyframe_management = bpy.props.BoolProperty(default=True)
-    bpy.types.Scene.show_utils = bpy.props.BoolProperty(default=True) 
+    bpy.types.Scene.show_utils = bpy.props.BoolProperty(default=True)
+    bpy.types.Scene.select_all_in_groups = bpy.props.BoolProperty(
+        name="Select All In Groups",
+        description="When enabled, clicking on a group in the outliner selects all objects in that group",
+        default=False
+    )
+    bpy.types.OUTLINER_HT_header.append(select_group_objects)
+    bpy.types.OUTLINER_MT_collection.append(draw_outliner_group_menu)
 
 def unregister():
     for cls in reversed(classes):
@@ -487,7 +605,10 @@ def unregister():
     del bpy.types.Scene.show_render_settings
     del bpy.types.Scene.show_set_material
     del bpy.types.Scene.show_keyframe_management
-    del bpy.types.Scene.show_utils  
+    del bpy.types.Scene.show_utils
+    del bpy.types.Scene.select_all_in_groups
+    bpy.types.OUTLINER_HT_header.remove(select_group_objects)
+    bpy.types.OUTLINER_MT_collection.remove(draw_outliner_group_menu)
 
 if __name__ == "__main__":
     register()
